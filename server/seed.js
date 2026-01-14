@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const Flight = require('./models/Flight');
 
-dotenv.config();
+dotenv.config({ path: './server/.env' });
 
 const airlines = ['IndiGo', 'Air India', 'SpiceJet', 'Vistara'];
 const cities = ['Delhi', 'Mumbai', 'Bangalore', 'Chennai', 'Kolkata', 'Hyderabad'];
@@ -46,7 +46,7 @@ const seedFlights = async () => {
             surge_until: null
         });
 
-        // Random flights
+        // Random flights with Return Pairs
         for (let i = 1; i <= 20; i++) {
             const from = cities[Math.floor(Math.random() * cities.length)];
             let to = cities[Math.floor(Math.random() * cities.length)];
@@ -54,12 +54,26 @@ const seedFlights = async () => {
                 to = cities[Math.floor(Math.random() * cities.length)];
             }
 
+            const price = Math.floor(Math.random() * (3000 - 2000 + 1) + 2000);
+
+            // Outbound
             flights.push({
                 flight_id: `FL-${100 + i}`,
                 airline: airlines[Math.floor(Math.random() * airlines.length)],
                 departure_city: from,
                 arrival_city: to,
-                base_price: Math.floor(Math.random() * (3000 - 2000 + 1) + 2000),
+                base_price: price,
+                search_attempts: [],
+                surge_until: null
+            });
+
+            // Return (Guaranteed)
+            flights.push({
+                flight_id: `FL-RET-${100 + i}`,
+                airline: airlines[Math.floor(Math.random() * airlines.length)], // Different airline maybe?
+                departure_city: to,
+                arrival_city: from,
+                base_price: price + Math.floor(Math.random() * 500), // Slightly different price
                 search_attempts: [],
                 surge_until: null
             });
