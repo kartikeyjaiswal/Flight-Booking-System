@@ -15,7 +15,7 @@ const Navbar = () => {
                     {user ? (
                         <>
                             <Link to="/history" className="hover:text-blue-200 transition-colors">My Bookings</Link>
-                            <span className="hover:text-blue-200 cursor-pointer">Check-in</span>
+                            <Link to="/history" className="hover:text-blue-200 cursor-pointer">Check-in</Link>
                             <Link to="/contact" className="hover:text-blue-200 transition-colors">Contact</Link>
                             <span onClick={logout} className="hover:text-red-300 cursor-pointer text-blue-100">Logout ({user.name.split(' ')[0]})</span>
                         </>

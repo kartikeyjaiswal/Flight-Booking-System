@@ -1,23 +1,26 @@
-import { useState, useEffect } from 'react';
-import axios from 'axios';
+import { useState, useEffect, useContext } from 'react';
+import AuthContext from '../context/AuthContext';
+import bookingService from '../services/bookingService';
 
 const History = () => {
     const [bookings, setBookings] = useState([]);
+    const { user } = useContext(AuthContext);
 
     useEffect(() => {
         const fetchHistory = async () => {
+            if (!user) return;
             try {
-                const res = await axios.get('http://localhost:5000/api/bookings');
-                setBookings(res.data);
+                const data = await bookingService.getUserBookings(user.email);
+                setBookings(data);
             } catch (err) {
                 console.error(err);
             }
         };
         fetchHistory();
-    }, []);
+    }, [user]);
 
     const downloadTicket = (booking) => {
-        const url = `http://localhost:5000/api/bookings/${booking._id}/pdf`;
+        const url = bookingService.getTicketPdfUrl(booking._id);
         const link = document.createElement('a');
         link.href = url;
         link.download = `Ticket-${booking.pnr}.pdf`;
@@ -28,7 +31,7 @@ const History = () => {
 
     const handleCheckIn = async (id) => {
         try {
-            await axios.put(`http://localhost:5000/api/bookings/${id}/checkin`);
+            await bookingService.checkIn(id);
             // Update local state
             setBookings(bookings.map(b => b._id === id ? { ...b, status: 'Checked-in' } : b));
             alert('Web Check-in Successful!');
@@ -56,36 +59,52 @@ const History = () => {
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                            {bookings.map(booking => (
-                                <tr key={booking._id}>
-                                    <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">{booking.pnr}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-gray-500">{booking.airline} ({booking.flight_id})</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-gray-500">{booking.source} ➝ {booking.destination}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-gray-500">{new Date(booking.booking_date).toLocaleDateString()}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-gray-500">₹{booking.price_paid}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${booking.status === 'Checked-in' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
-                                            {booking.status || 'Confirmed'}
-                                        </span>
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-4">
-                                        <button
-                                            onClick={() => downloadTicket(booking)}
-                                            className="text-blue-600 hover:text-blue-900 font-semibold"
-                                        >
-                                            Download
-                                        </button>
-                                        {booking.status !== 'Checked-in' && (
+                            {bookings.map(booking => {
+                                // Formatting Passenger Display
+                                let paxDisplay = "Unknown";
+                                if (booking.passengers && booking.passengers.length > 0) {
+                                    paxDisplay = booking.passengers[0].name;
+                                    if (booking.passengers.length > 1) {
+                                        paxDisplay += ` + ${booking.passengers.length - 1} others`;
+                                    }
+                                } else if (booking.passenger_name) {
+                                    paxDisplay = booking.passenger_name; // Legacy support
+                                }
+
+                                return (
+                                    <tr key={booking._id}>
+                                        <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">{booking.pnr}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-gray-500">{booking.airline} ({booking.flight_id})</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-gray-500">{booking.source} ➝ {booking.destination}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-gray-500">{new Date(booking.booking_date).toLocaleDateString()}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-gray-500">
+                                            ₹{booking.total_price || booking.price_paid}
+                                            <div className="text-xs text-gray-400">{paxDisplay}</div>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${booking.status === 'Checked-in' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                                                {booking.status || 'Confirmed'}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-4">
                                             <button
-                                                onClick={() => handleCheckIn(booking._id)}
-                                                className="text-[#001b94] hover:text-blue-800 font-bold border border-[#001b94] px-3 py-1 rounded"
+                                                onClick={() => downloadTicket(booking)}
+                                                className="text-blue-600 hover:text-blue-900 font-semibold"
                                             >
-                                                Web Check-in
+                                                Download
                                             </button>
-                                        )}
-                                    </td>
-                                </tr>
-                            ))}
+                                            {booking.status !== 'Checked-in' && (
+                                                <button
+                                                    onClick={() => handleCheckIn(booking._id)}
+                                                    className="text-[#001b94] hover:text-blue-800 font-bold border border-[#001b94] px-3 py-1 rounded"
+                                                >
+                                                    Web Check-in
+                                                </button>
+                                            )}
+                                        </td>
+                                    </tr>
+                                );
+                            })}
                         </tbody>
                     </table>
                 </div>

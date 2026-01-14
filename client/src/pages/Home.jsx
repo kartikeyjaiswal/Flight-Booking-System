@@ -1,5 +1,9 @@
-import { useState, useEffect } from 'react';
-import axios from 'axios';
+import { useState, useEffect, useContext } from 'react';
+import { useNavigate } from 'react-router-dom';
+import AuthContext from '../context/AuthContext';
+import flightService from '../services/flightService';
+import SearchWidget from '../components/SearchWidget';
+import FlightCard from '../components/FlightCard';
 
 const Home = () => {
     const [from, setFrom] = useState('');
@@ -9,13 +13,43 @@ const Home = () => {
     const [sortBy, setSortBy] = useState('price'); // price, airline
     const [filterAirline, setFilterAirline] = useState('All');
 
-    const [wallet, setWallet] = useState(() => parseInt(localStorage.getItem('balance')) || 50000);
+    // Advanced booking state
+    const [tripType, setTripType] = useState('one-way'); // one-way, round-trip
+    const [bookingStep, setBookingStep] = useState('search'); // search, outbound-selected, review
+    const [outboundFlight, setOutboundFlight] = useState(null);
+    const [returnFlight, setReturnFlight] = useState(null);
+
+    const [passengers, setPassengers] = useState({
+        adults: 1,
+        children: 0,
+        infants: 0
+    });
+    const [specialFare, setSpecialFare] = useState(''); // 'student', 'senior', 'armed-forces', 'doctors'
+
+    const { user } = useContext(AuthContext);
+    const navigate = useNavigate();
+
+    // Wallet Key based on user
+    const walletKey = user ? `wallet_${user.email}` : 'wallet_guest';
+
+    // Initialize wallet
+    const [wallet, setWallet] = useState(() => {
+        const saved = localStorage.getItem(walletKey);
+        return saved ? parseInt(saved) : 50000;
+    });
+
     const [message, setMessage] = useState('');
     const [loading, setLoading] = useState(false);
 
+    // Update wallet when user changes
     useEffect(() => {
-        localStorage.setItem('balance', wallet);
-    }, [wallet]);
+        const saved = localStorage.getItem(walletKey);
+        setWallet(saved ? parseInt(saved) : 50000);
+    }, [walletKey]);
+
+    useEffect(() => {
+        localStorage.setItem(walletKey, wallet);
+    }, [wallet, walletKey]);
 
     useEffect(() => {
         let result = [...flights];
@@ -35,9 +69,9 @@ const Home = () => {
         setFilteredFlights(result);
     }, [flights, sortBy, filterAirline]);
 
-    const searchFlights = async () => {
-        const source = from.trim();
-        const destination = to.trim();
+    const handleSearchFlights = async (customFrom, customTo) => {
+        const source = (customFrom || from).trim();
+        const destination = (customTo || to).trim();
 
         if (!source || !destination) {
             setMessage('Please enter both source and destination.');
@@ -46,9 +80,9 @@ const Home = () => {
         setLoading(true);
         setMessage('');
         try {
-            const res = await axios.get(`http://localhost:5000/api/flights/search?from=${source}&to=${destination}`);
-            setFlights(res.data);
-            if (res.data.length === 0) setMessage('No flights found for this route.');
+            const data = await flightService.searchFlights(source, destination);
+            setFlights(data);
+            if (data.length === 0) setMessage('No flights found for this route.');
         } catch (err) {
             console.error(err);
             setMessage('Error fetching flights. Ensure server is running.');
@@ -57,51 +91,63 @@ const Home = () => {
         }
     };
 
-    const handleBook = async (flight) => {
-        if (wallet < flight.price) {
-            alert(`Insufficient Wallet Balance! Need \u20B9${flight.price - wallet} more.`);
+    const handleSearchClick = () => {
+        setBookingStep('search');
+        setOutboundFlight(null);
+        setReturnFlight(null);
+        handleSearchFlights();
+    };
+
+    const selectFlight = (flight) => {
+        if (!user) {
+            alert('Please Login to continue!');
+            navigate('/login');
             return;
         }
 
-        const confirm = window.confirm(`Confirm booking for ${flight.airline} to ${flight.arrival_city} for \u20B9${flight.price}?`);
-        if (!confirm) return;
-
-        try {
-            const bookingData = {
-                flight_id: flight.flight_id,
-                passenger_name: "Indigo User",
-                airline: flight.airline,
-                source: flight.departure_city,
-                destination: flight.arrival_city,
-                price_paid: flight.price
-            };
-
-            const res = await axios.post('http://localhost:5000/api/bookings', bookingData);
-
-            setWallet(prev => prev - flight.price);
-
-            const pdfUrl = `http://localhost:5000/api/bookings/${res.data._id}/pdf`;
-
-            const link = document.createElement('a');
-            link.href = pdfUrl;
-            link.download = `Ticket-${res.data.pnr}.pdf`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-
-            alert('Booking Confirmed! Your ticket is downloading.');
-            searchFlights();
-
-        } catch (err) {
-            console.error(err);
-            alert('Booking Failed: ' + (err.response?.data?.message || err.message));
+        if (tripType === 'one-way') {
+            handleBook([flight]);
+        } else {
+            // Round Trip Logic
+            if (!outboundFlight) {
+                setOutboundFlight(flight);
+                setBookingStep('outbound-selected');
+                setMessage('Great! Now select your return flight.');
+                // Auto search return
+                handleSearchFlights(to, from);
+                // Creating a visual swap effect
+                setFrom(to);
+                setTo(from);
+            } else {
+                setReturnFlight(flight);
+                setBookingStep('review');
+                setMessage('Review your Round Trip booking.');
+            }
         }
     };
+
+    const handleBook = async (flightsToBook) => {
+        navigate('/book', {
+            state: {
+                outboundFlight: flightsToBook[0], // Always has outbound
+                returnFlight: flightsToBook[1] || null, // Optional return
+                passengers: passengers,
+                tripType: tripType
+            }
+        });
+    };
+
+    const updatePassengers = (type, value) => {
+        if (value < 0) return;
+        setPassengers(prev => ({ ...prev, [type]: value }));
+    };
+
+    const totalPax = passengers.adults + passengers.children + passengers.infants;
 
     return (
         <div className="-mt-4">
             {/* Hero Section */}
-            <div className="relative bg-[#001b94] h-[300px] flex items-center justify-center -mx-4 px-4">
+            <div className="relative bg-[#001b94] h-[350px] flex items-center justify-center -mx-4 px-4 pb-20">
                 <div className="absolute inset-0 bg-gradient-to-r from-blue-900 to-blue-700 opacity-90"></div>
                 <div className="text-white text-center z-10 relative">
                     <h1 className="text-4xl font-bold mb-2">Hello, where to?</h1>
@@ -109,137 +155,100 @@ const Home = () => {
                 </div>
             </div>
 
-            {/* Search Widget */}
-            <div className="max-w-5xl mx-auto -mt-16 relative z-20 px-4">
-                <div className="bg-white rounded-lg shadow-xl p-6 md:p-8">
-                    <div className="flex justify-between items-center mb-6">
-                        <div className="flex gap-4">
-                            <span className="border-b-2 border-blue-600 pb-1 text-blue-900 font-bold cursor-pointer">One Way</span>
-                            <span className="text-gray-500 cursor-pointer hover:text-blue-600">Round Trip</span>
-                        </div>
-                        <div className="text-sm font-bold text-gray-700 bg-gray-100 px-3 py-1 rounded-full">
-                            Wallet Balance: ₹{wallet.toLocaleString()}
-                        </div>
-                    </div>
+            {/* Search Widget Component */}
+            <SearchWidget
+                from={from} setFrom={setFrom}
+                to={to} setTo={setTo}
+                tripType={tripType} setTripType={setTripType}
+                setBookingStep={setBookingStep} setOutboundFlight={setOutboundFlight}
+                wallet={wallet}
+                totalPax={totalPax} passengers={passengers} updatePassengers={updatePassengers}
+                onSearch={handleSearchClick}
+                loading={loading} message={message}
+                specialFare={specialFare} setSpecialFare={setSpecialFare}
+            />
 
-                    <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-                        <div className="md:col-span-4">
-                            <label className="block text-gray-500 text-xs font-bold uppercase mb-1">From</label>
-                            <input
-                                className="w-full border-b-2 border-gray-300 py-2 text-xl font-bold text-gray-800 focus:outline-none focus:border-blue-600 transition-colors uppercase placeholder-gray-300"
-                                placeholder="DELHI"
-                                value={from} onChange={e => setFrom(e.target.value)}
-                            />
-                        </div>
-                        <div className="md:col-span-1 flex justify-center pb-2">
-                            <span className="bg-gray-100 p-2 rounded-full text-gray-400">⇆</span>
-                        </div>
-                        <div className="md:col-span-4">
-                            <label className="block text-gray-500 text-xs font-bold uppercase mb-1">To</label>
-                            <input
-                                className="w-full border-b-2 border-gray-300 py-2 text-xl font-bold text-gray-800 focus:outline-none focus:border-blue-600 transition-colors uppercase placeholder-gray-300"
-                                placeholder="MUMBAI"
-                                value={to} onChange={e => setTo(e.target.value)}
-                            />
-                        </div>
-                        <div className="md:col-span-3">
-                            <button
-                                className="w-full bg-[#001b94] text-white py-3 rounded-md font-bold text-lg hover:bg-blue-800 transition-transform active:scale-95 disabled:opacity-70"
-                                onClick={searchFlights}
-                                disabled={loading}
-                            >
-                                {loading ? 'Searching...' : 'Search Flight'}
-                            </button>
-                        </div>
-                    </div>
-                    {message && <div className="mt-4 p-3 bg-blue-50 text-blue-800 rounded border border-blue-100 text-center">{message}</div>}
-                </div>
-            </div>
-
-            {/* Flight Results */}
+            {/* Flight Results or Review */}
             <div className="max-w-5xl mx-auto py-10 px-4">
-                {flights.length > 0 && (
-                    <div className="flex flex-col md:flex-row justify-between items-center mb-6">
-                        <h3 className="text-xl font-bold text-gray-700">Available Flights ({filteredFlights.length})</h3>
-                        <div className="flex gap-4 mt-4 md:mt-0">
-                            <select
-                                className="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-[#001b94] cursor-pointer"
-                                value={sortBy}
-                                onChange={(e) => setSortBy(e.target.value)}
-                            >
-                                <option value="price">Sort by Price</option>
-                                <option value="airline">Sort by Airline</option>
-                            </select>
-                            <select
-                                className="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-[#001b94] cursor-pointer"
-                                value={filterAirline}
-                                onChange={(e) => setFilterAirline(e.target.value)}
-                            >
-                                <option value="All">All Airlines</option>
-                                <option value="IndiGo">IndiGo</option>
-                                <option value="Air India">Air India</option>
-                                <option value="SpiceJet">SpiceJet</option>
-                                <option value="Vistara">Vistara</option>
-                            </select>
+                {bookingStep === 'review' ? (
+                    <div className="bg-white p-6 rounded-lg shadow-lg border border-gray-200">
+                        <h2 className="text-2xl font-bold mb-6 text-[#001b94]">Review Your Trip</h2>
+                        <div className="space-y-4 mb-6">
+                            <div className="border p-4 rounded bg-gray-50">
+                                <h3 className="font-bold text-gray-700 mb-2">Outbound Flight</h3>
+                                <div className="flex justify-between">
+                                    <span>{outboundFlight.airline} ({outboundFlight.flight_id})</span>
+                                    <span className="font-bold">₹{outboundFlight.price}</span>
+                                </div>
+                                <div className="text-sm text-gray-500">{outboundFlight.departure_city} ➝ {outboundFlight.arrival_city}</div>
+                            </div>
+                            <div className="border p-4 rounded bg-gray-50">
+                                <h3 className="font-bold text-gray-700 mb-2">Return Flight</h3>
+                                <div className="flex justify-between">
+                                    <span>{returnFlight.airline} ({returnFlight.flight_id})</span>
+                                    <span className="font-bold">₹{returnFlight.price}</span>
+                                </div>
+                                <div className="text-sm text-gray-500">{returnFlight.departure_city} ➝ {returnFlight.arrival_city}</div>
+                            </div>
+                            <div className="flex justify-between items-center text-xl font-bold pt-4 border-t border-gray-200">
+                                <span>Total Price</span>
+                                <span className="text-[#001b94]">₹{outboundFlight.price + returnFlight.price}</span>
+                            </div>
+                        </div>
+                        <div className="flex gap-4">
+                            <button onClick={() => setBookingStep('search')} className="w-1/2 border border-gray-300 py-3 rounded font-bold text-gray-600 hover:bg-gray-50">Cancel</button>
+                            <button onClick={() => handleBook([outboundFlight, returnFlight])} className="w-1/2 bg-[#001b94] text-white py-3 rounded font-bold hover:bg-blue-800">Confirm Booking</button>
                         </div>
                     </div>
-                )}
-
-                <div className="space-y-4">
-                    {filteredFlights.map(flight => (
-                        <div key={flight._id} className="bg-white border border-gray-200 rounded-lg p-5 flex flex-col md:flex-row items-center justify-between hover:shadow-lg transition-all group">
-
-                            {/* Airline Info */}
-                            <div className="flex items-center gap-4 w-full md:w-1/4 mb-4 md:mb-0">
-                                <div className="h-12 w-12 bg-gray-100 rounded-full flex items-center justify-center text-2xl">
-                                    ✈️
-                                </div>
-                                <div>
-                                    <h4 className="font-bold text-gray-800">{flight.airline}</h4>
-                                    <p className="text-xs text-gray-500 uppercase">{flight.flight_id}</p>
-                                </div>
+                ) : (
+                    <>
+                        {/* Header for Round Trip Selection */}
+                        {tripType === 'round-trip' && bookingStep === 'outbound-selected' && (
+                            <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded text-yellow-800 font-bold flex justify-between items-center">
+                                <span>Step 2: Select Return Flight ({from} to {to})</span>
+                                <div className="text-sm font-normal">Outbound: ₹{outboundFlight.price}</div>
                             </div>
+                        )}
 
-                            {/* Route Info */}
-                            <div className="flex-1 text-center mb-4 md:mb-0 px-4">
-                                <div className="flex items-center justify-center gap-4 text-gray-700">
-                                    <div>
-                                        <div className="text-xl font-bold">10:00</div>
-                                        <div className="text-sm text-gray-400 uppercase">{flight.departure_city}</div>
-                                    </div>
-                                    <div className="flex flex-col items-center w-24">
-                                        <div className="text-xs text-gray-400 mb-1">2h 15m</div>
-                                        <div className="h-[2px] w-full bg-gray-300 relative">
-                                            <div className="absolute -top-1 right-0 h-2 w-2 bg-gray-300 rounded-full"></div>
-                                            <div className="absolute -top-1 left-0 h-2 w-2 bg-gray-300 rounded-full"></div>
-                                        </div>
-                                        <div className="text-xs text-gray-400 mt-1">Non-stop</div>
-                                    </div>
-                                    <div>
-                                        <div className="text-xl font-bold">12:15</div>
-                                        <div className="text-sm text-gray-400 uppercase">{flight.arrival_city}</div>
-                                    </div>
+                        {flights.length > 0 && (
+                            <div className="flex flex-col md:flex-row justify-between items-center mb-6">
+                                <h3 className="text-xl font-bold text-gray-700">Available Flights ({filteredFlights.length})</h3>
+                                <div className="flex gap-4 mt-4 md:mt-0">
+                                    <select
+                                        className="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-[#001b94] cursor-pointer"
+                                        value={sortBy}
+                                        onChange={(e) => setSortBy(e.target.value)}
+                                    >
+                                        <option value="price">Sort by Price</option>
+                                        <option value="airline">Sort by Airline</option>
+                                    </select>
+                                    <select
+                                        className="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-[#001b94] cursor-pointer"
+                                        value={filterAirline}
+                                        onChange={(e) => setFilterAirline(e.target.value)}
+                                    >
+                                        <option value="All">All Airlines</option>
+                                        <option value="IndiGo">IndiGo</option>
+                                        <option value="Air India">Air India</option>
+                                        <option value="SpiceJet">SpiceJet</option>
+                                        <option value="Vistara">Vistara</option>
+                                    </select>
                                 </div>
                             </div>
+                        )}
 
-                            {/* Price & Action */}
-                            <div className="w-full md:w-1/4 flex flex-col items-end pl-4 border-l border-gray-100">
-                                {flight.isSurge && (
-                                    <span className="text-[10px] font-bold tracking-wider text-red-600 bg-red-50 px-2 py-0.5 rounded border border-red-100 mb-1 animate-pulse">
-                                        ⚡ SURGE PRICING
-                                    </span>
-                                )}
-                                <div className="text-2xl font-bold text-[#001b94] mb-2">₹{flight.price.toLocaleString()}</div>
-                                <button
-                                    className="bg-[#001b94] text-white px-6 py-2 rounded font-semibold hover:bg-blue-800 w-full transition-colors"
-                                    onClick={() => handleBook(flight)}
-                                >
-                                    Book
-                                </button>
-                            </div>
+                        <div className="space-y-4">
+                            {filteredFlights.map(flight => (
+                                <FlightCard
+                                    key={flight._id}
+                                    flight={flight}
+                                    onSelect={selectFlight}
+                                    actionLabel={tripType === 'round-trip' && bookingStep === 'search' ? 'Select' : 'Book'}
+                                />
+                            ))}
                         </div>
-                    ))}
-                </div>
+                    </>
+                )}
             </div>
         </div>
     );
