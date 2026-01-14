@@ -26,6 +26,18 @@ const History = () => {
         document.body.removeChild(link);
     };
 
+    const handleCheckIn = async (id) => {
+        try {
+            await axios.put(`http://localhost:5000/api/bookings/${id}/checkin`);
+            // Update local state
+            setBookings(bookings.map(b => b._id === id ? { ...b, status: 'Checked-in' } : b));
+            alert('Web Check-in Successful!');
+        } catch (err) {
+            console.error(err);
+            alert('Check-in failed');
+        }
+    };
+
     return (
         <div>
             <h2 className="text-2xl font-bold mb-6">Booking History</h2>
@@ -39,6 +51,7 @@ const History = () => {
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Route</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
                             </tr>
                         </thead>
@@ -50,13 +63,26 @@ const History = () => {
                                     <td className="px-6 py-4 whitespace-nowrap text-gray-500">{booking.source} ➝ {booking.destination}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-gray-500">{new Date(booking.booking_date).toLocaleDateString()}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-gray-500">₹{booking.price_paid}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${booking.status === 'Checked-in' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                                            {booking.status || 'Confirmed'}
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-4">
                                         <button
                                             onClick={() => downloadTicket(booking)}
                                             className="text-blue-600 hover:text-blue-900 font-semibold"
                                         >
-                                            Download Ticket
+                                            Download
                                         </button>
+                                        {booking.status !== 'Checked-in' && (
+                                            <button
+                                                onClick={() => handleCheckIn(booking._id)}
+                                                className="text-[#001b94] hover:text-blue-800 font-bold border border-[#001b94] px-3 py-1 rounded"
+                                            >
+                                                Web Check-in
+                                            </button>
+                                        )}
                                     </td>
                                 </tr>
                             ))}
