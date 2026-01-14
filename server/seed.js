@@ -16,6 +16,37 @@ const seedFlights = async () => {
         console.log('Cleared existing flights');
 
         const flights = [];
+
+        // GUARANTEED FLIGHTS
+        flights.push({
+            flight_id: 'FL-DEL-MUM-01',
+            airline: 'IndiGo',
+            departure_city: 'Delhi',
+            arrival_city: 'Mumbai',
+            base_price: 2500,
+            search_attempts: [],
+            surge_until: null
+        });
+        flights.push({
+            flight_id: 'FL-DEL-MUM-02',
+            airline: 'Air India',
+            departure_city: 'Delhi',
+            arrival_city: 'Mumbai',
+            base_price: 3200,
+            search_attempts: [],
+            surge_until: null
+        });
+        flights.push({
+            flight_id: 'FL-MUM-DEL-01',
+            airline: 'Vistara',
+            departure_city: 'Mumbai',
+            arrival_city: 'Delhi',
+            base_price: 3500,
+            search_attempts: [],
+            surge_until: null
+        });
+
+        // Random flights
         for (let i = 1; i <= 20; i++) {
             const from = cities[Math.floor(Math.random() * cities.length)];
             let to = cities[Math.floor(Math.random() * cities.length)];

@@ -66,4 +66,19 @@ router.get('/:id/pdf', async (req, res) => {
     }
 });
 
+// Web Check-in
+router.put('/:id/checkin', async (req, res) => {
+    try {
+        const booking = await Booking.findById(req.params.id);
+        if (!booking) return res.status(404).json({ message: 'Booking not found' });
+
+        booking.status = 'Checked-in';
+        await booking.save();
+
+        res.json(booking);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
 module.exports = router;
