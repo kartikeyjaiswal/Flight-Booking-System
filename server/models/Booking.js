@@ -8,6 +8,7 @@ const BookingSchema = new mongoose.Schema({
     source: { type: String, required: true },
     destination: { type: String, required: true },
     price_paid: { type: Number, required: true },
+    status: { type: String, default: 'Confirmed' }, // Confirmed, Checked-in
     booking_date: { type: Date, default: Date.now }
 });
 

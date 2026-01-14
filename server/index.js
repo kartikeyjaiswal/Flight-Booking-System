@@ -28,8 +28,11 @@ app.get('/', (req, res) => {
 const flightRoutes = require('./routes/flights');
 const bookingRoutes = require('./routes/bookings');
 
+const authRoutes = require('./routes/auth');
+
 app.use('/api/flights', flightRoutes);
 app.use('/api/bookings', bookingRoutes);
+app.use('/api/auth', authRoutes);
 
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
