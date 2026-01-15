@@ -2,6 +2,10 @@
 
 A full-stack Flight Booking System inspired by the GoIndigo experience, featuring Dynamic Pricing, Wallet Simulation, PDF Ticket Generation, and now **User Authentication** and **Web Check-in**.
 
+## 🌐 Live Demo
+- **Frontend**: [https://flight-booking-system-frontend.onrender.com/](https://flight-booking-system-frontend.onrender.com/)
+- **Backend**: [https://flight-booking-system-backend-lv95.onrender.com](https://flight-booking-system-backend-lv95.onrender.com)
+
 ## 🚀 Tech Stack
 - **Frontend**: React (Vite) + TailwindCSS (Indigo-themed)
 - **Backend**: Node.js + Express
